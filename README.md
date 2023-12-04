@@ -1,5 +1,5 @@
 # calibration-equivalence-using-sphere
-The simlulation code for the paper "Calibration Equivalence Between Double Contact Theorem and Common Self-polar Triangle Using Separate Sphere Images".
+The simlulation [code](https://github.com/Eric-Zhuo/calibration-equivalence-using-sphere) for the paper "Calibration Equivalence Between Double Contact Theorem and Common Self-polar Triangle Using Separate Sphere Images".
 
 Please cite our paper, if the code is used for publishing research.
 
