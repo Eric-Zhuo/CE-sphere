@@ -12,13 +12,14 @@ K = [5000 0.1  2000; %Intrinsic parameters, K, 3*3, 5 degrees of freedom%
     0   4000 1000;
     0   0    1];
   
-
+R =
+t = 
 
 %%
 %Calibration
 
 Sphere_num = 3; % sphere images should >= 3
-[sphere_image] = generate_sphere_image(Image_num,K,l); % generate the simulation sphere images
+[sphere_image] = generate_sphere_image(Image_num, K, R, t); % generate the simulation sphere images
 
 
 [est_T_K] = T(sphere_image); % use sphere images to calibration besed on method T
