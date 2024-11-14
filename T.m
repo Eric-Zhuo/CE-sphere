@@ -1,128 +1,110 @@
-%T 球的公共自极三点形摄像机标定%
-%会出现两球像相交的情况，此时不能标定%
-clc
-clear
-%%
-%基本参数%
-K=[1250 1.1 0; %摄像机内参K,3*3，5个自由度%
-    0   900 0;
-    0   0   1];
+% Camera Calibration Using Sphere Images
+% Inputs:
+%    Ci - Sphere image (at least 3)
+%
+% Outputs:
+%    K - 3-by-3 - Intrinsic parameters
+%
 
-%摄像机投影%
-%a1=normrnd(0,1,3,3);%R为旋转矩阵（正交矩阵）,3*3%
-%[R1,~]=qr(a1);
-%a2=normrnd(0,1,3,3);%R为旋转矩阵（正交矩阵）,3*3%
-%[R2,~]=qr(a2);
-%a3=normrnd(0,1,3,3);%R为旋转矩阵（正交矩阵）,3*3%
-%[R3,~]=qr(a3);
+function [est_T_K] = T(sphere_image)
+    %%
+    %Method T needs at least 3 sphere images to calibration
+    [~, ~, Image_num] = size(sphere_image);
+    
+    if Image_num < 3
+        error('Method T needs at least 3 sphere images to calibration.')
+    end
+    
+    %%
+    %Step 1, find vertices%
 
-R1=[-0.122737383435346,-0.039404033112337,0.991656622466631;-0.174983080118159,-0.982698191829029,-0.060705728299062;0.976891220341245,-0.180973992469746,0.113718765688666];
-R2=[-0.814187578950629,0.051333088522194,0.578328194285291;-0.285554006383093,-0.902688892048257,-0.321887672350549;0.505526948560685,-0.427220877527611,0.749616452649927];
-R3=[-0.845420468672276,0.372508376815001,0.382755457639211;-0.533697771741772,-0.617045054899464,-0.578292390285386;0.020758602742380,-0.693175958488731,0.720469410166326];
+    
+    l = zeros(3, Image_num);
+    
+    for i = 1:Image_num
+        Vi = zeros(3, Image_num);
+        
+        for j = 1:Image_num
+            if i ~= j
+         
+                [Vij, e] = eig(sphere_image(:,:,i), sphere_image(:,:,j));
+                e = diag(e);
+                [~, k1] = max(abs(median(sign(e)) - sign(e))); 
+                v = Vij(:, k1); 
+                Vi(:, i) = v / v(3); %get the vanishing points
+             end        
+         end
+         
+         Vi(:, i) = [];
 
-T1=zeros(3,1); %T为平移向量，3*1%
-T2=zeros(3,1); 
-T3=zeros(3,1); 
-% T1=normrnd(0,1,3,1);
-
-%三个球的位置%
-
-x1=[3;2;2];
-r1=1;
-x2=[7;3;5];
-r2=2;
-x3=[2;5;1];
-r3=1;
-
-%%
-%第一步，得像%
-[C1,c1,x11] =findimage(x1,r1,K,R1,T1);
-C1=C1/C1(3,3);
-
-
-[C2,c2,x21] =findimage(x2,r2,K,R2,T2);
-C2=C2/C2(3,3);
+         [~,~,V] = svd(Vi'); 
+         li = V(:,end);        
+         l(:, i) = li / li(end);
+         
+     end
 
 
-[C3,c3,x31] =findimage(x3,r3,K,R3,T3);
-C3=C3/C3(3,3);
+    %%
+    %Step 2, obtain the simplified ICPs%
 
-if C1(1,1)*C1(2,2)-C1(1,2)^2>0 && C2(1,1)*C2(2,2)-C2(1,2)^2>0 && C3(1,1)*C3(2,2)-C3(1,2)^2>0    
-else
-    error('输入不符合要求，其中有球像不是椭圆');   
+    %
+    %Function, find the intersections between line L[A1;B1;D1] and conic C=[a1 b1 c1 d1 e1 1]'%
+
+    function [X,Y] = crossLandC(L,C)
+    A1 = L(1);
+    B1 = L(2);
+    D1 = L(3);
+
+    C = C/C(3,3);
+    a1 = C(1,1);
+    b1 = 2*C(1,2);
+    c1 = C(2,2);
+    d1 = 2*C(1,3);
+    e1 = 2*C(2,3);
+
+    X = zeros(2,1);
+    Y = zeros(2,1);
+    %sovle
+    X(1) = -(D1 + (B1*(A1*(A1^2*conj(e1)^2 + B1^2*conj(d1)^2 + D1^2*conj(b1)^2 - 4*B1^2*conj(a1) - 4*A1^2*conj(c1) - 4*D1^2*conj(a1)*conj(c1) + 4*A1*B1*conj(b1) - 2*A1*B1*conj(d1)*conj(e1) - 2*A1*D1*conj(b1)*conj(e1) + 4*A1*D1*conj(c1)*conj(d1) + 4*B1*D1*conj(a1)*conj(e1) - 2*B1*D1*conj(b1)*conj(d1))^(1/2) - A1^2*conj(e1) + A1*B1*conj(d1) + A1*D1*conj(b1) - 2*B1*D1*conj(a1)))/(2*(conj(c1)*A1^2 - conj(b1)*A1*B1 + conj(a1)*B1^2)))/A1;
+
+    X(2) = -(D1 - (B1*(A1^2*conj(e1) + A1*(A1^2*conj(e1)^2 + B1^2*conj(d1)^2 + D1^2*conj(b1)^2 - 4*B1^2*conj(a1) - 4*A1^2*conj(c1) - 4*D1^2*conj(a1)*conj(c1) + 4*A1*B1*conj(b1) - 2*A1*B1*conj(d1)*conj(e1) - 2*A1*D1*conj(b1)*conj(e1) + 4*A1*D1*conj(c1)*conj(d1) + 4*B1*D1*conj(a1)*conj(e1) - 2*B1*D1*conj(b1)*conj(d1))^(1/2) - A1*B1*conj(d1) - A1*D1*conj(b1) + 2*B1*D1*conj(a1)))/(2*(conj(c1)*A1^2 - conj(b1)*A1*B1 + conj(a1)*B1^2)))/A1;
+
+    Y(1) = (A1*(A1^2*conj(e1)^2 + B1^2*conj(d1)^2 + D1^2*conj(b1)^2 - 4*B1^2*conj(a1) - 4*A1^2*conj(c1) - 4*D1^2*conj(a1)*conj(c1) + 4*A1*B1*conj(b1) - 2*A1*B1*conj(d1)*conj(e1) - 2*A1*D1*conj(b1)*conj(e1) + 4*A1*D1*conj(c1)*conj(d1) + 4*B1*D1*conj(a1)*conj(e1) - 2*B1*D1*conj(b1)*conj(d1))^(1/2) - A1^2*conj(e1) + A1*B1*conj(d1) + A1*D1*conj(b1) - 2*B1*D1*conj(a1))/(2*(conj(c1)*A1^2 - conj(b1)*A1*B1 + conj(a1)*B1^2));
+
+    Y(2) = -(A1^2*conj(e1) + A1*(A1^2*conj(e1)^2 + B1^2*conj(d1)^2 + D1^2*conj(b1)^2 - 4*B1^2*conj(a1) - 4*A1^2*conj(c1) - 4*D1^2*conj(a1)*conj(c1) + 4*A1*B1*conj(b1) - 2*A1*B1*conj(d1)*conj(e1) - 2*A1*D1*conj(b1)*conj(e1) + 4*A1*D1*conj(c1)*conj(d1) + 4*B1*D1*conj(a1)*conj(e1) - 2*B1*D1*conj(b1)*conj(d1))^(1/2) - A1*B1*conj(d1) - A1*D1*conj(b1) + 2*B1*D1*conj(a1))/(2*(conj(c1)*A1^2 - conj(b1)*A1*B1 + conj(a1)*B1^2));
+
+    end
+
+    mi = [];
+    mj = [];
+
+    for i = 1:Image_num
+        [X,Y] = crossLandC(l(:, i), sphere_image(:,:,i));
+        mi(:,i) = [X(1) Y(1) 1]';
+        mj(:,i) = [X(2) Y(2) 1]';    
+    end
+    
+
+    %%
+    %Step 3, obtain the intrinsic and mirror parameters%
+
+    A = [];
+    for i = 1:Image_num
+        A = [A;real(mi(1,i)^2) real(mi(1,i)*mi(2,i)) real(mi(2,i)^2) real(mi(1,i)) real(mi(2,i)) 1;
+            imag(mi(1,i)^2) imag(mi(1,i)*mi(2,i)) imag(mi(2,i)^2) imag(mi(1,i)) imag(mi(2,i)) 0];
+    end
+    
+    
+    [~,~,V] = svd(A); 
+    c = V(:,end);
+    c = c/c(6);
+    C = [c(1)   c(2)/2 c(4)/2;
+       c(2)/2 c(3)   c(5)/2;
+       c(4)/2 c(5)/2 c(6)  ];
+    K1 = inv(chol(C));
+    est_T_K = K1/K1(3,3); % get K
+    
+
 end
-
-%%
-%第二步，找公共自极三点形的特殊顶点%
-[V12,e3]=eig(C1,C2);
-e3=diag(e3);
-[~,k3]=max(abs(median(sign(e3))-sign(e3)));
-v12=V12(:,k3);
-v12=v12/v12(3);
-hold on
-plot(v12(1),v12(2),'*')
-text(v12(1),v12(2),'v12')
-
-
-[V23,e1]=eig(C2,C3);
-e1=diag(e1);
-[~,k1]=max(abs(median(sign(e1))-sign(e1)));
-v23=V23(:,k1);
-v23=v23/v23(3);
-hold on
-plot(v23(1),v23(2),'*')
-text(v23(1),v23(2),'v23')
-
-
-[V13,e2]=eig(C1,C3);
-e2=diag(e2);
-[~,k2]=max(abs(median(sign(e2))-sign(e2)));
-v13=V13(:,k2);
-v13=v13/v13(3);
-hold on
-plot(v13(1),v13(2),'*')
-text(v13(1),v13(2),'v13')
-
-
-%%
-%消失点两两连线得消失线
-l1=cross(v13,v12);
-l2=cross(v23,v12);
-l3=cross(v23,v13);
-
-%%
-%第三步，影消线和椭圆的交点
-
-[X1,Y1]=crossLandC(l1,C1);
-mi1=[X1(1),Y1(1),1]';
-mj1=[X1(2),Y1(2),1]';
-
-[X2,Y2]=crossLandC(l2,C2);
-mi2=[X2(1),Y2(1),1]';
-mj2=[X2(2),Y2(2),1]';
-
-[X3,Y3]=crossLandC(l3,C3);
-mi3=[X3(1),Y3(1),1]';
-mj3=[X3(2),Y3(2),1]';
-
-%%
-%第四步，确定w，再确定K
-
-A=[real(mi1(1)^2),real(mi1(1)*mi1(2)),real(mi1(2)^2),real(mi1(1)),real(mi1(2)),1;
-   imag(mi1(1)^2),imag(mi1(1)*mi1(2)),imag(mi1(2)^2),imag(mi1(1)),imag(mi1(2)),0;
-   real(mi2(1)^2),real(mi2(1)*mi2(2)),real(mi2(2)^2),real(mi2(1)),real(mi2(2)),1;
-   imag(mi2(1)^2),imag(mi2(1)*mi2(2)),imag(mi2(2)^2),imag(mi2(1)),imag(mi2(2)),0;
-   real(mi3(1)^2),real(mi3(1)*mi3(2)),real(mi3(2)^2),real(mi3(1)),real(mi3(2)),1;
-   imag(mi3(1)^2),imag(mi3(1)*mi3(2)),imag(mi3(2)^2),imag(mi3(1)),imag(mi3(2)),0];
-
-[~,~,V]=svd(A); %奇异值分解%
-c=V(:,end);
-c=c/c(6);
-C=[c(1)   c(2)/2 c(4)/2;
-   c(2)/2 c(3)   c(5)/2;
-   c(4)/2 c(5)/2 c(6)  ];
-% C=inv(C);
-K1=inv(chol(C)); %对C进行Cholesky分解且求逆%
-K1=K1/K1(3,3) %标准化
 
 
